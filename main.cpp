@@ -3,6 +3,11 @@
 #include <stdexcept>
 #include <string>
 
+
+// A video player with libmpv (the api for mpv player) so we can launch a video to loop seamlessly.
+// Also has precise performance for seeking (not tested explicitly)
+
+
 void set_option(mpv_handle* ctx, const char* name, const char* value) {
     int error = mpv_set_option_string(ctx, name, value);
     if (error < 0) {
