@@ -2,11 +2,14 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <thread>
+#include <sstream>    // For parsing commands
+#include <cstring>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
 
-
-// A video player with libmpv (the api for mpv player) so we can launch a video to loop seamlessly.
-// Also has precise performance for seeking (not tested explicitly)
-
+// A video player with libmpv so we can launch a video to loop seamlessly.
 
 void set_option(mpv_handle* ctx, const char* name, const char* value) {
     int error = mpv_set_option_string(ctx, name, value);
@@ -19,14 +22,83 @@ void set_option(mpv_handle* ctx, const char* name, const char* value) {
 
 void print_controls() {
     std::cout << "\n=== MPV Player Controls ===\n"
-              << "q     - Quit\n"
-              << "Space - Play/Pause\n"
-              << "f     - Toggle fullscreen\n"
-              << "1     - Jump to first frame\n"
-              << "←/→   - Frame-step (when paused)\n"
-              << "[Mouse] Click and drag to move window\n"
-              << "[Mouse] Double click for fullscreen\n"
+              << "q             - Quit\n"
+              << "Space         - Play/Pause\n"
+              << "f             - Toggle fullscreen\n"
+              << "1             - Jump to first frame\n"
+              << "←/→           - Frame-step (when paused)\n"
+              << "[Mouse]       - Click and drag to move window\n"
+              << "[Mouse]       - Double click for fullscreen\n"
+              << "UDP Commands:\n"
+              << "   PLAY           - Resume playback\n"
+              << "   STOP           - Pause playback\n"
+              << "   SEEK <time>    - Seek to specified time (e.g., 'SEEK 0' for beginning)\n"
+              << "   VOL <number>   - Set volume to the specified value\n"
               << "==========================================\n\n";
+}
+
+// UDP listener function running in its own thread.
+// It listens for incoming UDP packets and processes commands.
+void udp_listener(mpv_handle* ctx) {
+    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd < 0) {
+        std::cerr << "Error creating UDP socket" << std::endl;
+        return;
+    }
+
+    sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(12345); // UDP port
+    addr.sin_addr.s_addr = INADDR_ANY;
+
+    if (bind(sockfd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        std::cerr << "Error binding UDP socket" << std::endl;
+        close(sockfd);
+        return;
+    }
+
+    char buffer[1024];
+    while (true) {
+        ssize_t recv_len = recv(sockfd, buffer, sizeof(buffer) - 1, 0);
+        if (recv_len > 0) {
+            buffer[recv_len] = '\0';
+            std::string command(buffer);
+            if (command.find("PLAY") != std::string::npos) {
+                const char* cmd[] = {"set", "pause", "no", NULL};
+                mpv_command(ctx, cmd);
+                std::cout << "Received PLAY command. Resuming playback.\n";
+            } else if (command.find("STOP") != std::string::npos) {
+                const char* cmd[] = {"set", "pause", "yes", NULL};
+                mpv_command(ctx, cmd);
+                std::cout << "Received STOP command. Pausing playback.\n";
+            } else if (command.rfind("SEEK", 0) == 0) { // Command starts with "SEEK"
+                std::istringstream iss(command);
+                std::string token;
+                double time_val;
+                if (!(iss >> token >> time_val)) {
+                    std::cout << "Invalid SEEK command format. Use: SEEK <time>\n";
+                } else {
+                    std::string timeStr = std::to_string(time_val);
+                    const char* cmd[] = {"seek", timeStr.c_str(), "absolute", NULL};
+                    mpv_command(ctx, cmd);
+                    std::cout << "Received SEEK command. Seeking to " << time_val << " seconds.\n";
+                }
+            } else if (command.rfind("VOL", 0) == 0) { // Command starts with "VOL"
+                std::istringstream iss(command);
+                std::string token;
+                int vol_val;
+                if (!(iss >> token >> vol_val)) {
+                    std::cout << "Invalid VOL command format. Use: VOL <number>\n";
+                } else {
+                    std::string volStr = std::to_string(vol_val);
+                    const char* cmd[] = {"set", "volume", volStr.c_str(), NULL};
+                    mpv_command(ctx, cmd);
+                    std::cout << "Received VOL command. Setting volume to " << vol_val << ".\n";
+                }
+            }
+        }
+    }
+    close(sockfd);
 }
 
 int main(int argc, char *argv[]) {
@@ -46,37 +118,29 @@ int main(int argc, char *argv[]) {
         set_option(ctx, "input-vo-keyboard", "yes");
 
         // Frame-perfect seeking options
-        set_option(ctx, "hr-seek", "yes");          // Enable precise seeking
-        set_option(ctx, "hr-seek-framedrop", "no"); // Never drop frames during seek
-        set_option(ctx, "resume-playback", "no");   // Don't auto-resume after seek
-        set_option(ctx, "cache", "yes");            // Enable caching
-        set_option(ctx, "cache-secs", "10");        // Cache 10 seconds
-        set_option(ctx, "demuxer-seekable-cache", "yes"); // Enable seekable cache
+        set_option(ctx, "hr-seek", "yes");
+        set_option(ctx, "hr-seek-framedrop", "no");
+        set_option(ctx, "resume-playback", "no");
+        set_option(ctx, "cache", "yes");
+        set_option(ctx, "cache-secs", "10");
+        set_option(ctx, "demuxer-seekable-cache", "yes");
 
         // Video output options for better frame accuracy
-        set_option(ctx, "video-sync", "display-resample"); // Precise frame timing
-        set_option(ctx, "interpolation", "no");     // Disable interpolation
+        set_option(ctx, "video-sync", "display-resample");
+        set_option(ctx, "interpolation", "no");
 
-        // Set volume to 100 and disable controls
+        // Set volume and disable OSDs
         set_option(ctx, "volume", "100");
         set_option(ctx, "volume-max", "100");
+        set_option(ctx, "osd-level", "0");
+        set_option(ctx, "osd-bar", "no");
+        set_option(ctx, "osd-on-seek", "no");
 
-        // Disable OSDs
-        set_option(ctx, "osd-level", "0");          // Disable OSD completely
-        set_option(ctx, "osd-bar", "no");           // Disable seek bar
-        set_option(ctx, "osd-on-seek", "no");       // Disable OSD on seek
-
-
-        // Set a reasonable default window size (e.g., 720p)
+        // Set default window size and looping options
         set_option(ctx, "autofit", "500x500");
-
-        // // Window settings
-        // set_option(ctx, "fullscreen", "yes");
         set_option(ctx, "screen", "1");
         set_option(ctx, "loop", "inf");
         set_option(ctx, "window-dragging", "yes");
-
-
 
         // Initialize MPV
         int status = mpv_initialize(ctx);
@@ -87,6 +151,10 @@ int main(int argc, char *argv[]) {
         }
 
         print_controls();
+
+        // Start the UDP listener thread
+        std::thread udp_thread(udp_listener, ctx);
+        udp_thread.detach();
 
         // Load video
         const char* cmd[] = {"loadfile", "../loop.mp4", NULL};
@@ -99,19 +167,16 @@ int main(int argc, char *argv[]) {
 
         std::cout << "Starting playback in fullscreen mode...\n";
 
-        // Event loop
-        while (1) {
+        // Main event loop for MPV
+        while (true) {
             mpv_event* event = mpv_wait_event(ctx, -1);
-
             if (event->event_id == MPV_EVENT_SHUTDOWN)
                 break;
-
             if (event->event_id == MPV_EVENT_LOG_MESSAGE) {
-                mpv_event_log_message* msg = (mpv_event_log_message*)event->data;
+                auto msg = reinterpret_cast<mpv_event_log_message*>(event->data);
                 std::cout << "[" << msg->prefix << "] " << msg->text;
             }
         }
-
     } catch (const std::exception& e) {
         std::cout << "Error: " << e.what() << std::endl;
         mpv_destroy(ctx);
