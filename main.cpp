@@ -89,7 +89,7 @@ int main(int argc, char *argv[]) {
         print_controls();
 
         // Load video
-        const char* cmd[] = {"loadfile", "../looping1.mp4", NULL};
+        const char* cmd[] = {"loadfile", "../loop.mp4", NULL};
         status = mpv_command(ctx, cmd);
         if (status < 0) {
             std::cout << "Failed to load file: " << mpv_error_string(status) << std::endl;
