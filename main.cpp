@@ -121,13 +121,9 @@ int main(int argc, char *argv[]) {
         set_option(ctx, "hr-seek", "yes");
         set_option(ctx, "hr-seek-framedrop", "no");
         set_option(ctx, "resume-playback", "no");
-        set_option(ctx, "cache", "yes");
-        set_option(ctx, "cache-secs", "10");
-        set_option(ctx, "demuxer-seekable-cache", "yes");
 
         // Video output options for better frame accuracy
-        set_option(ctx, "video-sync", "display-resample");
-        set_option(ctx, "interpolation", "no");
+        set_option(ctx, "hwdec", "auto");
 
         // Set volume and disable OSDs
         set_option(ctx, "volume", "100");
@@ -157,7 +153,7 @@ int main(int argc, char *argv[]) {
         udp_thread.detach();
 
         // Load video
-        const char* cmd[] = {"loadfile", "../loop.mp4", NULL};
+        const char* cmd[] = {"loadfile", "../loop3.mp4", NULL};
         status = mpv_command(ctx, cmd);
         if (status < 0) {
             std::cout << "Failed to load file: " << mpv_error_string(status) << std::endl;
