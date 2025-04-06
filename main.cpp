@@ -10,6 +10,11 @@
 #include <unistd.h>
 #include <vector>
 
+// Global variables for attract feature.
+std::string current_video = "";
+std::string attract_video = "attract.mp4";
+bool use_attract = true;  // Controls whether the attract feature is active.
+
 void set_option(mpv_handle* ctx, const char* name, const char* value) {
     int error = mpv_set_option_string(ctx, name, value);
     if (error < 0) {
@@ -20,8 +25,9 @@ void set_option(mpv_handle* ctx, const char* name, const char* value) {
     }
 }
 
-// Helper: load a file. If auto_resume is true, playback begins immediately.
+// Helper: load a file and update current_video. If auto_resume is true, playback begins immediately.
 void load_file_command(mpv_handle* ctx, const std::string &filename, bool auto_resume) {
+    current_video = filename;  // Track the current file.
     const char* cmd[] = {"loadfile", filename.c_str(), "replace", NULL};
     int status = mpv_command(ctx, cmd);
     if (status < 0) {
@@ -71,6 +77,9 @@ void print_controls() {
               << "   SETLOOPS ON        - Enable looping (without loading a file)\n"
               << "   SETLOOPS OFF       - Disable looping (without loading a file)\n"
               << "   REMOVE or UNLOAD   - Unload (remove) current video\n"
+              << "   ATTRACT {FILENAME} - Set the attract video\n"
+              << "   USEATTRACT ON      - Enable attract feature\n"
+              << "   USEATTRACT OFF     - Disable attract feature\n"
               << "==========================================\n\n";
 }
 
@@ -113,8 +122,23 @@ void udp_listener(mpv_handle* ctx, int udp_port) {
             while (!command.empty() && (command.back() == '\n' || command.back() == '\r'))
                 command.pop_back();
             std::cout << "UDP Received: \"" << command << "\"" << std::endl;
+
+            // ATTRACT {FILENAME}: set the attract video.
+            if (command.rfind("ATTRACT ", 0) == 0) {
+                attract_video = command.substr(8);
+                std::cout << "Attract video set to: " << attract_video << std::endl;
+            }
+            // USEATTRACT ON/OFF: enable or disable the attract feature.
+            else if (command == "USEATTRACT ON") {
+                use_attract = true;
+                std::cout << "Attract feature enabled.\n";
+            }
+            else if (command == "USEATTRACT OFF") {
+                use_attract = false;
+                std::cout << "Attract feature disabled.\n";
+            }
             // LOOPS {FILENAME}: set looping on, load file, and play.
-            if (command.rfind("LOOPS ", 0) == 0) {
+            else if (command.rfind("LOOPS ", 0) == 0) {
                 std::string filename = command.substr(6);
                 set_loops(ctx, true);
                 load_file_command(ctx, filename, true);
@@ -178,12 +202,10 @@ void udp_listener(mpv_handle* ctx, int udp_port) {
             }
             // FINAL HOLD: on end-of-file, hold last frame (do nothing).
             else if (command == "FINAL HOLD") {
-                // Keep window open to hold the last frame.
                 set_option(ctx, "keep-open", "yes");
             }
             // FINAL NOTHING: on end-of-file, just print "EOF".
             else if (command == "FINAL NOTHING") {
-                // Ensure window stays open.
                 set_option(ctx, "keep-open", "no");
             }
             // SETLOOPS ON: simply enable looping.
@@ -216,7 +238,7 @@ void udp_listener(mpv_handle* ctx, int udp_port) {
 int main(int argc, char *argv[]) {
     // Default UDP port is 12345, but allow it to be overridden via command-line.
     int udp_port = 12345;
-    if (argc >= 2) {  // Expecting port as argument if present.
+    if (argc >= 2) {
         udp_port = std::stoi(argv[1]);
     }
     mpv_handle *ctx = mpv_create();
@@ -224,32 +246,31 @@ int main(int argc, char *argv[]) {
         std::cerr << "Failed to create MPV context" << std::endl;
         return 1;
     }
-    // Basic Options
+    // Basic Options.
     set_option(ctx, "input-terminal", "no");
     set_option(ctx, "terminal", "no");
     set_option(ctx, "input-vo-keyboard", "yes");
     set_option(ctx, "input-default-bindings", "yes");
-    // Window & Display
+    // Window & Display.
     set_option(ctx, "force-window", "yes");
     set_option(ctx, "border", "no");
-    // Set keep-open based on desired behavior; default here is keep-open (FINAL_HOLD).
-    set_option(ctx, "keep-open", "yes");
+    set_option(ctx, "keep-open", "no"); // FINAL_HOLD behavior.
     set_option(ctx, "autofit", "500x500");
     set_option(ctx, "screen", "1");
     set_option(ctx, "window-dragging", "yes");
-    // Playback & Seeking
+    // Playback & Seeking.
     set_option(ctx, "demuxer-max-bytes", "1GiB");
     set_option(ctx, "demuxer-max-back-bytes", "1GiB");
     set_option(ctx, "loop-file", "0");
     set_option(ctx, "hr-seek", "yes");
     set_option(ctx, "hr-seek-framedrop", "no");
     set_option(ctx, "resume-playback", "no");
-    // Performance & Quality
+    // Performance & Quality.
     set_option(ctx, "hwdec", "auto-safe");
-    // Audio
+    // Audio.
     set_option(ctx, "volume", "100");
     set_option(ctx, "volume-max", "100");
-    // OSD
+    // OSD.
     set_option(ctx, "osd-level", "0");
 
     int status = mpv_initialize(ctx);
@@ -283,6 +304,16 @@ int main(int argc, char *argv[]) {
              if (eef->reason == MPV_END_FILE_REASON_ERROR && eef->error != 0) {
                   std::cerr << "MPV Error: Playback terminated with error: "
                             << mpv_error_string(eef->error) << std::endl;
+             }
+             else if (eef->reason == MPV_END_FILE_REASON_EOF) {
+                  // Attract feature: if main video finished, play the attract video (if enabled).
+                  if (use_attract && (current_video != attract_video)) {
+                      std::cout << "Main video finished. Playing attract video." << std::endl;
+                      set_loops(ctx, true);
+                      load_file_command(ctx, attract_video, true);
+                  } else {
+                      std::cout << "Attract video finished or not used." << std::endl;
+                  }
              }
          }
     }
