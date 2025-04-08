@@ -10,9 +10,12 @@ include_directories(${MPV_INCLUDE_DIRS})
 link_directories(${MPV_LIBRARY_DIRS})
 
 add_executable(CharUDPMPV
-        main.cpp
-        UdpComm.cpp
-        UdpComm.h
-        CommandProcessor.cpp
-        CommandProcessor.h)
+        src/main.cpp
+        src/UdpComm.cpp
+        src/UdpComm.h
+        src/json.hpp
+        src/Player.cpp
+        src/Player.h
+        src/Controller.cpp
+        src/Controller.h)
 target_link_libraries(CharUDPMPV ${MPV_LIBRARIES})
