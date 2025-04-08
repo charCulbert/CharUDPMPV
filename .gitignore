@@ -1,7 +1,7 @@
 # included
 external/
 include/
-
+build/
 
 # CLion settings
 .idea/
