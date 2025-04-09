@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>UDP Controller Config Generator</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 2rem;
+      background: #f5f5f5;
+      margin: 0;
+    }
+    fieldset {
+      margin-bottom: 1.5rem;
+      padding: 1rem;
+      background: #fff;
+      border-radius: 5px;
+      border: 1px solid #ddd;
+    }
+    legend {
+      font-weight: bold;
+      font-size: 1.1rem;
+    }
+    label {
+      display: block;
+      margin: 0.5rem 0 0.2rem;
+    }
+    input, select, textarea, button {
+      width: 100%;
+      padding: 0.5rem;
+      margin-bottom: 0.5rem;
+      box-sizing: border-box;
+    }
+    .device-row, .cue-row {
+      border-top: 1px solid #ddd;
+      padding-top: 1rem;
+      margin-top: 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .cue-block {
+      background: #fff;
+      padding: 1rem;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      margin-bottom: 1rem;
+    }
+    .inline {
+      display: inline-block;
+      width: auto;
+      margin-right: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>UDP Controller Config Generator</h1>
+
+  <fieldset>
+    <legend>This Device / Globals</legend>
+    <label>This Device Name:</label><input type="text" id="thisDeviceName" value="PLAYER1">
+    <label>IP Address:</label><input type="text" id="thisDeviceIp" value="192.168.1.100">
+    <label>Controller Send Port:</label><input type="number" id="controllerSendPort" value="12345">
+    <label>Controller Receive Port:</label><input type="number" id="controllerReceivePort" value="12346">
+    <label>Controller IP:</label><input type="text" id="controllerIp" value="255.255.255.255">
+    <label><input type="checkbox" id="isController" onchange="toggleControllerSections();"> This device is a controller</label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Attract Mode (Local Only)</legend>
+    <label>Use Attract Mode:</label><input type="checkbox" id="useAttract" checked onchange="toggleAttractVideoField();">
+    <div id="attractFields">
+      <label>Attract Video Filename:</label><input type="text" id="attractVideo" value="attract.mp4">
+    </div>
+  </fieldset>
+
+  <fieldset id="otherDevicesSection">
+    <legend>Other Devices</legend>
+    <div id="devices"></div>
+    <button onclick="addDevice()">+ Add Device</button>
+  </fieldset>
+
+  <fieldset id="cuesSection">
+    <legend>Cues</legend>
+    <div id="cues"></div>
+    <button onclick="addCue()">+ Add Cue</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Generated JSON</legend>
+    <textarea id="jsonOutput" rows="20" readonly></textarea>
+    <br>
+    <button onclick="generateJSON()">Generate JSON</button>
+  </fieldset>
+
+<script>
+let devices = [];
+let cues = [];
+
+function toggleControllerSections() {
+  const isController = document.getElementById('isController').checked;
+  document.getElementById('otherDevicesSection').style.display = isController ? 'block' : 'none';
+  document.getElementById('cuesSection').style.display = isController ? 'block' : 'none';
+}
+
+function toggleAttractVideoField() {
+  const show = document.getElementById('useAttract').checked;
+  document.getElementById('attractFields').style.display = show ? 'block' : 'none';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  toggleControllerSections();
+  toggleAttractVideoField();
+  renderCues();
+});
+
+function addDevice() {
+  const id = devices.length;
+  devices.push({ name: '', ip: '' });
+  renderDevices();
+}
+
+function removeDevice(index) {
+  devices.splice(index, 1);
+  renderDevices();
+  renderCues();
+}
+
+function renderDevices() {
+  const container = document.getElementById('devices');
+  container.innerHTML = '';
+  devices.forEach((d, i) => {
+    const div = document.createElement('div');
+    div.className = 'device-row';
+    div.innerHTML = `
+      <input placeholder="Device Name" value="${d.name}" onchange="devices[${i}].name = this.value; renderCues();">
+      <input placeholder="IP Address" value="${d.ip}" onchange="devices[${i}].ip = this.value">
+      <button onclick="removeDevice(${i})">×</button>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function addCue() {
+  const id = cues.length;
+  const allDevices = [document.getElementById('thisDeviceName').value, ...devices.map(d => d.name)];
+  const cue = {
+    name: `cue_${id + 1}`,
+    trigger: { type: "udp_message", message: "", from_device: allDevices[0], count: 1, delay_ms: 0, reset_on_fire: false },
+    actions: [{ type: "send_udp", message: "", destination: [allDevices[0]], delay_ms: 0 }]
+  };
+  cues.push(cue);
+  renderCues();
+}
+
+function removeCue(index) {
+  cues.splice(index, 1);
+  renderCues();
+}
+
+function renderCues() {
+  const container = document.getElementById('cues');
+  container.innerHTML = '';
+  const allDevices = [document.getElementById('thisDeviceName').value, ...devices.map(d => d.name)];
+  cues.forEach((cue, i) => {
+    const div = document.createElement('div');
+    div.className = 'cue-block';
+    div.innerHTML = `
+      <label>Cue Name:<input value="${cue.name}" onchange="cues[${i}].name = this.value"></label>
+      <label>Trigger Type:
+        <select onchange="cues[${i}].trigger.type = this.value; renderCues();">
+          <option value="startup_complete" ${cue.trigger.type === 'startup_complete' ? 'selected' : ''}>Startup Complete</option>
+          <option value="udp_message" ${cue.trigger.type === 'udp_message' ? 'selected' : ''}>UDP Message</option>
+        </select>
+      </label>
+      <div id="triggerFields-${i}"></div>
+      <label>Action Message:<input value="${cue.actions[0].message}" onchange="cues[${i}].actions[0].message = this.value"></label>
+      <label>Action Destination:
+        <select onchange="cues[${i}].actions[0].destination = [this.value]">
+          ${allDevices.map(name => `<option value="${name}" ${cue.actions[0].destination[0] === name ? 'selected' : ''}>${name}</option>`).join('')}
+        </select>
+      </label>
+      <label>Action Delay (ms):<input type="number" value="${cue.actions[0].delay_ms || 0}" onchange="cues[${i}].actions[0].delay_ms = parseInt(this.value)"></label>
+      <button onclick="removeCue(${i})">Delete Cue</button>
+    `;
+    container.appendChild(div);
+    if (cue.trigger.type === "udp_message") {
+      document.getElementById(`triggerFields-${i}`).innerHTML = `
+        <label>Trigger Message:<input value="${cue.trigger.message}" onchange="cues[${i}].trigger.message = this.value"></label>
+        <label>From Device:
+          <select onchange="cues[${i}].trigger.from_device = this.value">
+            ${allDevices.map(name => `<option value="${name}" ${cue.trigger.from_device === name ? 'selected' : ''}>${name}</option>`).join('')}
+          </select>
+        </label>
+        <label>Count:<input type="number" value="${cue.trigger.count}" onchange="cues[${i}].trigger.count = parseInt(this.value)"></label>
+        <label>Delay (ms):<input type="number" value="${cue.trigger.delay_ms}" onchange="cues[${i}].trigger.delay_ms = parseInt(this.value)"></label>
+        <label><input type="checkbox" ${cue.trigger.reset_on_fire ? 'checked' : ''} onchange="cues[${i}].trigger.reset_on_fire = this.checked"> Reset on Fire</label>
+      `;
+    }
+  });
+}
+
+function generateJSON() {
+  const controllerSendPort = parseInt(document.getElementById('controllerSendPort').value);
+  const controllerReceivePort = parseInt(document.getElementById('controllerReceivePort').value);
+  const controllerIp = document.getElementById('controllerIp').value;
+  const isController = document.getElementById('isController').checked;
+  const useAttract = document.getElementById('useAttract').checked;
+  const attractVideo = document.getElementById('attractVideo').value;
+  const thisDeviceName = document.getElementById('thisDeviceName').value;
+  const thisDeviceIp = document.getElementById('thisDeviceIp').value;
+
+  const config = {
+    controller_send_port: controllerSendPort,
+    controller_receive_port: controllerReceivePort,
+    controller_ip: controllerIp,
+    is_controller: isController,
+    use_attract: useAttract,
+    attract_video: attractVideo,
+    devices: {}
+  };
+
+  if (isController) {
+    devices.forEach(d => {
+      if (d.name && d.ip) {
+        config.devices[d.name] = { ip: d.ip };
+      }
+    });
+    config.cues = cues;
+  }
+
+  config.devices[thisDeviceName] = { ip: thisDeviceIp };
+
+  document.getElementById('jsonOutput').value = JSON.stringify(config, null, 2);
+}
+</script>
+</body>
+</html>
