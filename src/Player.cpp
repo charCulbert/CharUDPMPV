@@ -50,15 +50,7 @@ void Player::loadFileCommand(mpv_handle* ctx, const std::string &filename, bool 
     }
 }
 
-void Player::setLoops(mpv_handle* ctx, bool loop, UdpComm &udp) {
-    if (loop) {
-        setOption(ctx, "loop-file", "inf", udp);
-        udp.sendLog("Looping enabled.");
-    } else {
-        setOption(ctx, "loop-file", "0", udp);
-        udp.sendLog("Looping disabled.");
-    }
-}
+
 //
 // void Player::printControls(UdpComm &udp) {
 //     std::string controls =
@@ -92,7 +84,7 @@ void Player::processCommand(const std::string &cmd, UdpComm &udp, const sockaddr
         // Expecting "LOOPS {FILENAME}"
         std::string filename = cmd.substr(7);
         udp.sendLog("LOOPS command. Filename: " + filename);
-        setLoops(ctx, true, udp);
+        setOption(ctx, "loop-file", "inf", udp);
         loadFileCommand(ctx, filename, true, udp);
     }
     // PLAY {FILENAME} command: Load file and play it.
@@ -147,9 +139,9 @@ void Player::processCommand(const std::string &cmd, UdpComm &udp, const sockaddr
         udp.sendLog("SETLOOPS OFF command received.");
         setOption(ctx, "loop-file", "0", udp);
     }
-    // REMOVE or UNLOAD command: Unload the current video.
-    else if (cmd == "REMOVE" || cmd == "UNLOAD") {
-        udp.sendLog("REMOVE/UNLOAD command received. Unloading current video.");
+    // CLEAR or UNLOAD command: Unload the current video.
+    else if (cmd == "CLEAR" || cmd == "UNLOAD") {
+        udp.sendLog("CLEAR/UNLOAD command received. Unloading current video.");
         // One approach: send a "stop" command.
         const char* unload_cmd[] = {"stop", nullptr};
         mpv_command(ctx, unload_cmd);
@@ -160,7 +152,7 @@ void Player::processCommand(const std::string &cmd, UdpComm &udp, const sockaddr
         // Expecting "ATTRACT {FILENAME}"
         std::string filename = cmd.substr(8); // Assumes a space after ATTRACT.
         udp.sendLog("ATTRACT command. Filename: " + filename);
-        setLoops(ctx, true, udp);
+        setOption(ctx, "loop-file", "inf", udp);
         loadFileCommand(ctx, filename, true, udp);
     }
     // USEATTRACT ON / USEATTRACT OFF: Toggle attract mode.
@@ -258,11 +250,12 @@ void Player::start() {
                 udp.sendLog("MPV Error: Playback terminated with error: " + std::string(mpv_error_string(eef->error)));
             } else if (eef->reason == MPV_END_FILE_REASON_EOF) {
                 if (use_attract && (current_video != attract_video)) {
-                    udp.sendLog("Main video finished. Playing attract video.");
-                    setLoops(ctx, true, udp);
+                    udp.sendLog("EOF");
+                    udp.sendLog("Playing attract video.");
+                    setOption(ctx, "loop-file", "inf", udp);
                     loadFileCommand(ctx, attract_video, true, udp);
                 } else {
-                    udp.sendLog("Attract video finished or not used.");
+                    udp.sendLog("Attract video not used or not loaded.");
                 }
             }
         }
