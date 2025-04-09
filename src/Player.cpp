@@ -80,7 +80,6 @@ void Player::printControls(UdpComm &udp) {
 }
 
 void Player::processCommand(const std::string &cmd, UdpComm &udp, const sockaddr_in &src, socklen_t srcLen) {
-    udp.sendLog("Processing command: " + cmd);
 
     // LOAD {FILENAME} command: Load file with no explicit looping.
     if (cmd.substr(0, 5) == "LOAD ") {
@@ -180,6 +179,7 @@ void Player::processCommand(const std::string &cmd, UdpComm &udp, const sockaddr
         udp.sendLog("Attract video: " + attract_video);
         udp.sendLog("use_attract: " + std::string(use_attract ? "true" : "false"));
         // Optionally add additional status information.
+        udp.sendLog("READY");
     }
     else {
         udp.sendLog("Unrecognized command: " + cmd);

@@ -22,6 +22,10 @@ int main() {
         }
     }
 
+    //////////////
+    ////Player////
+    //////////////
+
     // Create Player instance.
     Player player;
 
@@ -44,37 +48,43 @@ int main() {
     // Start the player in its own thread.
     std::thread playerThread(&Player::start, &player);
     playerThread.detach();
-
+    /////////////////
+    // CONTROLLER //
+    ///////////////
     // Check if this instance should act as a controller.
     bool is_controller = false;
     if (config.contains("is_controller"))
         is_controller = config["is_controller"].get<bool>();
 
+    // In main.cpp
     if (is_controller) {
         std::cout << "Operating as CONTROLLER" << std::endl;
         Controller controller;
 
         // Populate the controller's devices.
         if (config.contains("devices")) {
-            // Assume "devices" is an object where each key is a device name,
-            // and its value is an object that contains an "ip" field.
+            std::cout << "Configuring devices:" << std::endl;
             for (auto &item : config["devices"].items()) {
-                controller.devices[item.key()] = item.value()["ip"].get<std::string>();
+                std::string name = item.key();
+                std::string ip = item.value()["ip"].get<std::string>();
+                controller.devices[name] = ip;
+                std::cout << "  Added device: " << name << " with IP: " << ip << std::endl;
             }
         }
+        std::cout << "Total devices configured: " << controller.devices.size() << std::endl;
 
         // Populate the controller's cues.
-        if (config.contains("cues") && config["cues"].is_array()) {
-            for (const auto &cue : config["cues"]) {
-                controller.cues.push_back(cue);
-            }
-        }
+         if (config.contains("cues") && config["cues"].is_array()) {
+             std::cout << "Loading " << config["cues"].size() << " cues" << std::endl;
+             for (const auto &cue : config["cues"]) {
+                 controller.cues.push_back(cue);
+             }
+         }
 
-        // Start the controller in its own thread.
+        // Start the controller - IMPORTANT: Use join() instead of detach()
         std::thread controllerThread(&Controller::start, &controller);
-        controllerThread.detach();
+        controllerThread.join();  //
     }
-
     // Keep main alive.
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(1));

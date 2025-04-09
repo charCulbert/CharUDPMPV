@@ -10,6 +10,7 @@ Controller::Controller()
       udp_send_port(12345),
       controller_ip("255.255.255.255"),
       udp(nullptr)
+
 {
 }
 
@@ -31,7 +32,7 @@ void Controller::start() {
             processIncomingMessage(msg, src, srcLen);
         });
     });
-    listenerThread.detach();
+    listenerThread.join();
 }
 
 void Controller::processIncomingMessage(const std::string &msg, const sockaddr_in &src, socklen_t srcLen) {
@@ -40,18 +41,17 @@ void Controller::processIncomingMessage(const std::string &msg, const sockaddr_i
     inet_ntop(AF_INET, &src.sin_addr, senderIP, sizeof(senderIP));
     std::string senderName = "Unknown";
     std::cout << "senderIP: " << senderIP << std::endl;
-
+    // Print all devices in the map to check if they're properly populated
     for (const auto &d : devices) {
-        std::cout << "DEBUG: Device name: " << d.first << ", IP: " << d.second << std::endl;
-        if (d.second == std::string(senderIP)) {
+        // Use a more robust comparison
+        if (std::string(senderIP) == d.second) {
             senderName = d.first;
             break;
         }
     }
 
 
-    // udp->sendLog("Controller: Received message '" + msg + "' from device: " + senderName);
-std::cout << senderName << "says: " << msg << std::endl;
+    std::cout << senderName << "says: " << msg << std::endl;
     // Iterate over cues to check if any should be triggered by this message.
     for (auto &cue : cues) {
         // We're only handling cues with trigger type "udp_message".
