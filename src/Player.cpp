@@ -255,6 +255,7 @@ void Player::start() {
                     setOption(ctx, "loop-file", "inf", udp);
                     loadFileCommand(ctx, attract_video, true, udp);
                 } else {
+                    udp.sendLog("EOF");
                     udp.sendLog("Attract video not used or not loaded.");
                 }
             }
