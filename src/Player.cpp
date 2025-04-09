@@ -30,8 +30,8 @@ void Player::setOption(mpv_handle* ctx, const char* name, const char* value, Udp
     if (error < 0)
         udp.sendLog(std::string("Failed to set option '") + name + "' to '" + value +
                     "': " + mpv_error_string(error));
-    else
-        udp.sendLog(std::string("Set option '") + name + "' to '" + value + "'");
+    // else
+        // udp.sendLog(std::string("Set option '") + name + "' to '" + value + "'");
 }
 
 void Player::loadFileCommand(mpv_handle* ctx, const std::string &filename, bool auto_resume, UdpComm &udp) {
@@ -59,25 +59,25 @@ void Player::setLoops(mpv_handle* ctx, bool loop, UdpComm &udp) {
         udp.sendLog("Looping disabled.");
     }
 }
-
-void Player::printControls(UdpComm &udp) {
-    std::string controls =
-        "\n=== MPV Player Controls ===\n"
-        "q               - Quit\n"
-        "Space           - Play/Pause\n"
-        "f               - Toggle fullscreen\n"
-        "1               - Jump to first frame\n"
-        "←/→             - Frame-step (when paused)\n"
-        "[Mouse]         - Click and drag to move window\n"
-        "[Mouse]         - Double click for fullscreen\n"
-        "----------------------------\n"
-        "UDP Commands:\n"
-        "   ATTRACT {FILENAME}\n"
-        "   PLAY\n"
-        "   SETLOOP [ON/OFF]\n"
-        "==========================================\n";
-    udp.sendLog(controls);
-}
+//
+// void Player::printControls(UdpComm &udp) {
+//     std::string controls =
+//         "\n=== MPV Player Controls ===\n"
+//         "q               - Quit\n"
+//         "Space           - Play/Pause\n"
+//         "f               - Toggle fullscreen\n"
+//         "1               - Jump to first frame\n"
+//         "←/→             - Frame-step (when paused)\n"
+//         "[Mouse]         - Click and drag to move window\n"
+//         "[Mouse]         - Double click for fullscreen\n"
+//         "----------------------------\n"
+//         "UDP Commands:\n"
+//         "   ATTRACT {FILENAME}\n"
+//         "   PLAY\n"
+//         "   SETLOOP [ON/OFF]\n"
+//         "==========================================\n";
+//     udp.sendLog(controls);
+// }
 
 void Player::processCommand(const std::string &cmd, UdpComm &udp, const sockaddr_in &src, socklen_t srcLen) {
 
@@ -130,22 +130,22 @@ void Player::processCommand(const std::string &cmd, UdpComm &udp, const sockaddr
     // FINAL HOLD command.
     else if (cmd == "FINAL HOLD") {
         udp.sendLog("FINAL HOLD command received.");
-        // Insert any final hold-related actions here.
+        setOption(ctx, "keep-open", "yes", udp);
     }
     // FINAL NOTHING command.
     else if (cmd == "FINAL NOTHING") {
         udp.sendLog("FINAL NOTHING command received.");
-        // Insert any final nothing-related actions here.
+        setOption(ctx, "keep-open", "no", udp);
     }
     // SETLOOPS ON / SETLOOP ON command.
     else if (cmd == "SETLOOPS ON" || cmd == "SETLOOP ON") {
         udp.sendLog("SETLOOPS ON command received.");
-        setLoops(ctx, true, udp);
+        setOption(ctx, "loop-file", "inf", udp);
     }
     // SETLOOPS OFF / SETLOOP OFF command.
     else if (cmd == "SETLOOPS OFF" || cmd == "SETLOOP OFF") {
         udp.sendLog("SETLOOPS OFF command received.");
-        setLoops(ctx, false, udp);
+        setOption(ctx, "loop-file", "0", udp);
     }
     // REMOVE or UNLOAD command: Unload the current video.
     else if (cmd == "REMOVE" || cmd == "UNLOAD") {
@@ -225,7 +225,6 @@ void Player::start() {
         mpv_terminate_destroy(ctx);
         return;
     }
-    printControls(udp);
 
     // Start the UDP listener in a separate thread.
     std::thread listenerThread([this, &udp]() {
