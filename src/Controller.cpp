@@ -3,7 +3,22 @@
 #include <thread>
 #include <chrono>
 #include <cstring>
+#ifdef _WIN32
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment (lib, "Ws2_32.lib")
+typedef int socklen_t;
+typedef long ssize_t;
+#else
+#include <sys/socket.h>
 #include <arpa/inet.h>
+#include <unistd.h>
+#include <netinet/in.h>
+#include <errno.h>
+#endif
+
 
 Controller::Controller()
     : udp_listen_port(12346),    // You can adjust these defaults as needed.

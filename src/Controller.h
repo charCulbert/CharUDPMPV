@@ -6,7 +6,17 @@
 #include <vector>
 #include "json.hpp"
 #include "UdpComm.h"
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+typedef int socklen_t;
+#else
 #include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
+
 
 using json = nlohmann::json;
 

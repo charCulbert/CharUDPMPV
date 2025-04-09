@@ -3,8 +3,17 @@
 
 #include <string>
 #include <functional>
-#include <netinet/in.h> // for sockaddr_in
 
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment (lib, "Ws2_32.lib")
+#else
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#endif
 class UdpComm {
 public:
     // Constructor and destructor.
