@@ -120,6 +120,9 @@ void Player::processCommand(const std::string &cmd, UdpComm &udp, const sockaddr
     // PLAY {FILENAME} command: Load file and play it.
     else if (cmd.substr(0, 5) == "PLAY " && cmd.size() > 5) {
         altEOF_mode = false;  // Mark that we're not in ALT mode.
+        setOption(ctx, "loop-file", "0", udp);
+
+
         std::string filename = cmd.substr(5);
         udp.sendLog("PLAY command with filename: " + filename);
         loadFileCommand(ctx, filename, true, udp);
@@ -127,12 +130,16 @@ void Player::processCommand(const std::string &cmd, UdpComm &udp, const sockaddr
     // PLAY (without argument): Resume current video.
     else if (cmd == "PLAY") {
         altEOF_mode = false;  // Mark that we're in ALT mode.
+        setOption(ctx, "loop-file", "0", udp);
+
         udp.sendLog("PLAY command received (resuming playback).");
         const char* play_cmd[] = {"set", "pause", "no", nullptr};
         mpv_command(ctx, play_cmd);
     }
     // ALTPLAY {FILENAME} command: Load file in alternate mode.
     else if (cmd.substr(0, 8) == "ALTPLAY ") {
+        setOption(ctx, "loop-file", "0", udp);
+
         std::string filename = cmd.substr(8);
         udp.sendLog("ALTPLAY command. Filename: " + filename);
         altEOF_mode = true;  // Mark that we're in ALT mode.
