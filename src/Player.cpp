@@ -129,7 +129,7 @@ void Player::processCommand(const std::string &cmd, UdpComm &udp, const sockaddr
     }
     // PLAY (without argument): Resume current video.
     else if (cmd == "PLAY") {
-        altEOF_mode = false;  // Mark that we're in ALT mode.
+        // altEOF_mode = false;  // DOES NOT END ALTEOF MODE
         setOption(ctx, "loop-file", "0", udp);
 
         udp.sendLog("PLAY command received (resuming playback).");
