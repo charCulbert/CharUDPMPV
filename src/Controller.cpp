@@ -119,8 +119,6 @@ void Controller::processIncomingMessage(const std::string &msg, const sockaddr_i
             // If not set, default to 1 (meaning "alternate_actions" never used unless 1 is also doing that logic).
             int countRequirement = cue["trigger"].value("count", 1);
 
-            bool resetOnFire     = cue["trigger"].value("reset_on_fire", false);
-
             // Check if message & sender match
             if (msg == triggerMessage && senderName == triggerFrom) {
                 // Cue triggered.
@@ -142,9 +140,12 @@ void Controller::processIncomingMessage(const std::string &msg, const sockaddr_i
                     bool useAlternate = false;
 
                     // For example, we do "alternate" if firedSoFar is divisible by countRequirement.
-                    if (firedSoFar % countRequirement == 0) {
+                    if (firedSoFar == countRequirement) {
+                        std::cout << "firedsofar is: " << firedSoFar << std::endl;
                         useAlternate = true;
+                        cueFiredCount[cueName] = 0;
                     }
+                    std::cout << "using alternate? " << useAlternate << std::endl;
 
                     // If "alternate_actions" array is present and it's time to use it
                     if (useAlternate && cue.contains("alternate_actions") && cue["alternate_actions"].is_array()) {
@@ -191,10 +192,6 @@ void Controller::processIncomingMessage(const std::string &msg, const sockaddr_i
                         }
                     }
 
-                    // If "reset_on_fire" is true, reset the fired count so it starts over
-                    if (resetOnFire) {
-                        cueFiredCount[cueName] = 0;
-                    }
                 }).detach();
             }
         }
