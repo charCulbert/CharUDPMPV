@@ -129,7 +129,7 @@ void Controller::processIncomingMessage(const std::string &msg, const sockaddr_i
                 cueFiredCount[cueName]++;
 
                 // Fire the cue in a separate thread for delay & concurrency.
-                std::thread([=, this]() {
+                std::thread([=]() {
                     // Delay if specified
                     if (triggerDelay > 0) {
                         std::this_thread::sleep_for(std::chrono::milliseconds(triggerDelay));
