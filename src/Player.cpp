@@ -19,6 +19,7 @@ Player::Player()
     : current_video(""),
       attract_video("attract.mp4"),
       use_attract(true),
+      altEOF_mode(false),
       udp_listen_port(12345),
       udp_send_port(12346),
       controller_ip("192.168.1.100"),
@@ -84,30 +85,60 @@ void Player::processCommand(const std::string &cmd, UdpComm &udp, const sockaddr
 
     // LOAD {FILENAME} command: Load file with no explicit looping.
     if (cmd.substr(0, 5) == "LOAD ") {
+        altEOF_mode = false;  // Mark that we're in ALT mode.
+
         std::string filename = cmd.substr(5);
         udp.sendLog("LOAD command. Filename: " + filename);
         loadFileCommand(ctx, filename, true, udp);
     }
     // LOOPS {FILENAME} command: Load file with looping enabled.
-    else if (cmd.substr(0, 6) == "LOOPS") {
-        // Expecting "LOOPS {FILENAME}"
-        std::string filename = cmd.substr(7);
-        udp.sendLog("LOOPS command. Filename: " + filename);
-        setOption(ctx, "loop-file", "inf", udp);
-        loadFileCommand(ctx, filename, true, udp);
+    else if (cmd.rfind("LOOPS ", 0) == 0) {
+        altEOF_mode = false;  // Mark that we're in ALT mode.
+
+        // Strip off the "LOOPS " prefix
+        std::string rest = cmd.substr(6);  // e.g. "2 myvideo.mp4" or "inf myvideo.mp4"
+
+        // Find first space after the loop count
+        auto spacePos = rest.find(' ');
+        if (spacePos != std::string::npos) {
+            std::string loopCount = rest.substr(0, spacePos);       // "2" or "inf"
+            std::string filename   = rest.substr(spacePos + 1);     // "myvideo.mp4"
+
+            udp.sendLog("LOOPS command. Loop count: " + loopCount +
+                        ", Filename: " + filename);
+
+            // Set mpv’s loop-file option with the user-specified loopCount
+            setOption(ctx, "loop-file", loopCount.c_str(), udp);
+
+            // Then load the file with autoplay enabled (true)
+            loadFileCommand(ctx, filename, true, udp);
+        } else {
+            udp.sendLog("LOOPS command error: missing filename!");
+        }
     }
+
     // PLAY {FILENAME} command: Load file and play it.
     else if (cmd.substr(0, 5) == "PLAY " && cmd.size() > 5) {
+        altEOF_mode = false;  // Mark that we're not in ALT mode.
         std::string filename = cmd.substr(5);
         udp.sendLog("PLAY command with filename: " + filename);
         loadFileCommand(ctx, filename, true, udp);
     }
     // PLAY (without argument): Resume current video.
     else if (cmd == "PLAY") {
+        altEOF_mode = false;  // Mark that we're in ALT mode.
         udp.sendLog("PLAY command received (resuming playback).");
         const char* play_cmd[] = {"set", "pause", "no", nullptr};
         mpv_command(ctx, play_cmd);
     }
+    // ALTPLAY {FILENAME} command: Load file in alternate mode.
+    else if (cmd.substr(0, 8) == "ALTEOFPLAY ") {
+        std::string filename = cmd.substr(8);
+        udp.sendLog("ALTPLAY command. Filename: " + filename);
+        altEOF_mode = true;  // Mark that we're in ALT mode.
+        loadFileCommand(ctx, filename, true, udp);
+    }
+
     // STOP command: Pause playback.
     else if (cmd == "STOP") {
         udp.sendLog("STOP command received (pausing playback).");
@@ -219,6 +250,7 @@ void Player::start() {
     setOption(ctx, "hwdec", "auto-safe", udp);
     setOption(ctx, "volume", "100", udp);
     setOption(ctx, "osd-level", "0", udp);
+    setOption(ctx, "fullscreen", "yes", udp);
 
     int status = mpv_initialize(ctx);
     if (status < 0) {
@@ -258,7 +290,11 @@ void Player::start() {
             if (eef->reason == MPV_END_FILE_REASON_ERROR && eef->error != 0) {
                 udp.sendLog("MPV Error: Playback terminated with error: " + std::string(mpv_error_string(eef->error)));
             } else if (eef->reason == MPV_END_FILE_REASON_EOF) {
-                if (use_attract && (current_video != attract_video)) {
+                if (altEOF_mode) {
+                    // Instead of sending the normal EOF, send ALTEOF
+                    udp.sendLog("ALTEOF");
+                    altEOF_mode = false;  // Clear the alt flag.
+                } else if (use_attract && (current_video != attract_video)) {
                     udp.sendLog("EOF");
                     udp.sendLog("Playing attract video.");
                     setOption(ctx, "loop-file", "inf", udp);

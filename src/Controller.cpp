@@ -35,6 +35,35 @@ Controller::~Controller() {
         delete udp;
     }
 }
+void Controller::processStartupComplete() {
+    for (auto &cue : cues) {
+        if (cue.contains("trigger") && cue["trigger"].contains("type") &&
+            cue["trigger"]["type"] == "startup_complete")
+        {
+            std::string cueName = cue["name"].get<std::string>();
+            std::cout << "Startup cue triggered: " << cueName << std::endl;
+
+            // Immediately process each action in the cue.
+            if (cue.contains("actions") && cue["actions"].is_array()) {
+                for (auto &action : cue["actions"]) {
+                    if (action.contains("type") && action["type"] == "send_udp") {
+                        std::string actionMessage = action.value("message", "");
+                        // Send UDP message to each destination immediately.
+                        if (action.contains("destination") && action["destination"].is_array()) {
+                            for (auto &dest : action["destination"]) {
+                                std::string destName = dest.get<std::string>();
+                                if (devices.find(destName) != devices.end()) {
+                                    std::string destIp = devices.at(destName);
+                                    udp->sendUdpMessage(actionMessage, destIp, udp_send_port);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 void Controller::start() {
     // Create the UdpComm instance using the controller’s configuration.
@@ -47,6 +76,11 @@ void Controller::start() {
             processIncomingMessage(msg, src, srcLen);
         });
     });
+    std::cout << "waiting 3s for intialization before running startup commands" << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+
+    processStartupComplete(); // or whatever your device name is
+
     listenerThread.join();
 }
 
@@ -55,7 +89,7 @@ void Controller::processIncomingMessage(const std::string &msg, const sockaddr_i
     char senderIP[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &src.sin_addr, senderIP, sizeof(senderIP));
     std::string senderName = "Unknown";
-    std::cout << "senderIP: " << senderIP << std::endl;
+    // std::cout << "senderIP: " << senderIP << std::endl;
     // Print all devices in the map to check if they're properly populated
     for (const auto &d : devices) {
         // Use a more robust comparison
@@ -67,60 +101,101 @@ void Controller::processIncomingMessage(const std::string &msg, const sockaddr_i
 
 
     std::cout << senderName << "says: " << msg << std::endl;
+
+
     // Iterate over cues to check if any should be triggered by this message.
+
+    // Check each cue to see if it should fire.
     for (auto &cue : cues) {
-        // We're only handling cues with trigger type "udp_message".
+        // Must have trigger type "udp_message" to handle here.
         if (cue.contains("trigger") && cue["trigger"].contains("type") &&
             cue["trigger"]["type"] == "udp_message")
         {
             std::string triggerMessage = cue["trigger"].value("message", "");
-            std::string triggerFrom = cue["trigger"].value("from_device", "");
-            int triggerDelay = cue["trigger"].value("delay_ms", 0);
-            bool resetOnFire = cue["trigger"].value("reset_on_fire", false);
-            // (Optional: use "count" if you want to count occurrences before firing.)
+            std::string triggerFrom    = cue["trigger"].value("from_device", "");
+            int triggerDelay           = cue["trigger"].value("delay_ms", 0);
 
-            // For this example, match if the incoming message equals the trigger's message
-            // and the sender's device name matches.
+            // Optional: how often to do "alternate_actions"
+            // If not set, default to 1 (meaning "alternate_actions" never used unless 1 is also doing that logic).
+            int countRequirement = cue["trigger"].value("count", 1);
+
+            bool resetOnFire     = cue["trigger"].value("reset_on_fire", false);
+
+            // Check if message & sender match
             if (msg == triggerMessage && senderName == triggerFrom) {
-                // udp->sendLog("Controller: Cue '" + cue.value("name", "unnamed") + "' triggered.");
+                // Cue triggered.
+                std::string cueName = cue["name"].get<std::string>();
+                std::cout << "cue triggered: " << cueName << std::endl;
 
-                // Optionally apply trigger delay.
-                if (triggerDelay > 0) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(triggerDelay));
-                }
+                // Increment the times this cue has fired.
+                cueFiredCount[cueName]++;
 
-                // Process each action in the cue.
-                if (cue.contains("actions") && cue["actions"].is_array()) {
-                    for (auto &action : cue["actions"]) {
-                        if (action.contains("type") && action["type"] == "send_udp") {
-                            std::string actionMessage = action.value("message", "");
-                            int actionDelay = action.value("delay_ms", 0);
+                // Fire the cue in a separate thread for delay & concurrency.
+                std::thread([=, this]() {
+                    // Delay if specified
+                    if (triggerDelay > 0) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(triggerDelay));
+                    }
 
-                            // If an action delay is specified, wait before sending.
-                            if (actionDelay > 0) {
-                                std::this_thread::sleep_for(std::chrono::milliseconds(actionDelay));
-                            }
+                    // Determine if we use alternate_actions
+                    int firedSoFar   = cueFiredCount.at(cueName);
+                    bool useAlternate = false;
 
-                            // Send the UDP message to each destination device specified.
-                            if (action.contains("destination") && action["destination"].is_array()) {
-                                for (auto &dest : action["destination"]) {
-                                    std::string destName = dest.get<std::string>();
-                                    // Look up the device's IP from our devices mapping.
-                                    if (devices.find(destName) != devices.end()) {
-                                        std::string destIp = devices[destName];
-                                        // udp->sendLog("Controller: Sending UDP message '" + actionMessage +
-                                        //              "' to " + destName + " (" + destIp + ")");
-                                        udp->sendUdpMessage(actionMessage, destIp, udp_send_port);
-                                    } else {
-                                        // udp->sendLog("Controller: Unknown destination device: " + destName);
+                    // For example, we do "alternate" if firedSoFar is divisible by countRequirement.
+                    if (firedSoFar % countRequirement == 0) {
+                        useAlternate = true;
+                    }
+
+                    // If "alternate_actions" array is present and it's time to use it
+                    if (useAlternate && cue.contains("alternate_actions") && cue["alternate_actions"].is_array()) {
+                        for (auto &action : cue["alternate_actions"]) {
+                            if (action.contains("type") && action["type"] == "send_udp") {
+                                std::string actionMessage = action.value("message", "");
+                                int actionDelay           = action.value("delay_ms", 0);
+                                if (actionDelay > 0) {
+                                    std::this_thread::sleep_for(std::chrono::milliseconds(actionDelay));
+                                }
+                                // Send to each destination
+                                if (action.contains("destination") && action["destination"].is_array()) {
+                                    for (auto &dest : action["destination"]) {
+                                        std::string destName = dest.get<std::string>();
+                                        if (devices.find(destName) != devices.end()) {
+                                            std::string destIp = devices.at(destName);
+                                            udp->sendUdpMessage(actionMessage, destIp, udp_send_port);
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
-                // Optionally, if "reset_on_fire" is false, you could prevent firing the cue again
-                // until certain conditions are met. (Not implemented in this minimal example.)
+                    // Otherwise, default to normal "actions" if it exists
+                    else if (cue.contains("actions") && cue["actions"].is_array()) {
+                        for (auto &action : cue["actions"]) {
+                            if (action.contains("type") && action["type"] == "send_udp") {
+                                std::string actionMessage = action.value("message", "");
+                                int actionDelay           = action.value("delay_ms", 0);
+                                if (actionDelay > 0) {
+                                    std::this_thread::sleep_for(std::chrono::milliseconds(actionDelay));
+                                }
+                                // Send to each destination
+                                if (action.contains("destination") && action["destination"].is_array()) {
+                                    for (auto &dest : action["destination"]) {
+                                        std::string destName = dest.get<std::string>();
+                                        if (devices.find(destName) != devices.end()) {
+                                            std::string destIp = devices.at(destName);
+                                            udp->sendUdpMessage(actionMessage, destIp, udp_send_port);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // If "reset_on_fire" is true, reset the fired count so it starts over
+                    if (resetOnFire) {
+                        cueFiredCount[cueName] = 0;
+                    }
+                }).detach();
             }
         }
     }

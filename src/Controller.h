@@ -34,6 +34,9 @@ public:
     // Map of device names to their IP addresses.
     std::unordered_map<std::string, std::string> devices;
 
+    // cues fired count
+    std::unordered_map<std::string, int> cueFiredCount;
+
     // Cue definitions (each cue is a JSON object).
     std::vector<json> cues;
 
@@ -43,6 +46,9 @@ public:
 private:
     // UdpComm instance dedicated to controller operations.
     UdpComm *udp;
+
+    // run the startup commands specified in the json
+    void processStartupComplete();
 
     // Process an incoming UDP message.
     void processIncomingMessage(const std::string &msg, const sockaddr_in &src, socklen_t srcLen);

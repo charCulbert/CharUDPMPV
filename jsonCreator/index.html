@@ -103,6 +103,28 @@ function toggleControllerSections() {
   document.getElementById('cuesSection').style.display = isController ? 'block' : 'none';
 }
 
+function toggleAltActions(i, isChecked) {
+  if (isChecked) {
+    // If not present, create a default alternate_actions block
+    if (!cues[i].alternate_actions) {
+      const allDevices = [document.getElementById('thisDeviceName').value, ...devices.map(d => d.name)];
+      cues[i].alternate_actions = [
+        {
+          type: "send_udp",
+          message: "",
+          destination: [allDevices[0]],
+          delay_ms: 0
+        }
+      ];
+    }
+  } else {
+    // Remove it entirely
+    delete cues[i].alternate_actions;
+  }
+  renderCues();
+}
+
+
 function toggleAttractVideoField() {
   const show = document.getElementById('useAttract').checked;
   document.getElementById('attractFields').style.display = show ? 'block' : 'none';
@@ -192,11 +214,48 @@ function renderCues() {
             ${allDevices.map(name => `<option value="${name}" ${cue.trigger.from_device === name ? 'selected' : ''}>${name}</option>`).join('')}
           </select>
         </label>
-        <label>Count:<input type="number" value="${cue.trigger.count}" onchange="cues[${i}].trigger.count = parseInt(this.value)"></label>
+        <label>Count:<input typ e="number" value="${cue.trigger.count}" onchange="cues[${i}].trigger.count = parseInt(this.value)"></label>
         <label>Delay (ms):<input type="number" value="${cue.trigger.delay_ms}" onchange="cues[${i}].trigger.delay_ms = parseInt(this.value)"></label>
         <label><input type="checkbox" ${cue.trigger.reset_on_fire ? 'checked' : ''} onchange="cues[${i}].trigger.reset_on_fire = this.checked"> Reset on Fire</label>
+         <label>
+      <input type="checkbox" ${cue.alternate_actions ? 'checked' : ''}
+      onchange="toggleAltActions(${i}, this.checked)">
+      Use Alternate Actions
+    </label><div id="altBlock${i}"></div>
       `;
     }
+    // After you create div.innerHTML for the main Cue fields...
+    if (cue.alternate_actions) {
+      // We insert some HTML to configure each alternate action
+      let altHtml = `<div style="margin-left:1rem; border-left: 2px solid #ccc; padding-left:1rem;">
+                   <strong>Alternate Actions</strong>`;
+
+      cue.alternate_actions.forEach((action, aidx) => {
+        altHtml += `
+      <label>Alternate Action Message:
+        <input value="${action.message}" onchange="cues[${i}].alternate_actions[${aidx}].message = this.value">
+      </label>
+      <label>Alternate Destination:
+        <select onchange="cues[${i}].alternate_actions[${aidx}].destination = [this.value]">
+          ${allDevices.map(name => `
+            <option value="${name}"
+              ${action.destination[0] === name ? 'selected' : ''}>
+              ${name}
+            </option>
+          `).join('')}
+        </select>
+      </label>
+      <label>Alternate Action Delay (ms):
+        <input type="number" value="${action.delay_ms}"
+          onchange="cues[${i}].alternate_actions[${aidx}].delay_ms = parseInt(this.value)">
+      </label>
+    `;
+      });
+
+      altHtml += `</div>`;
+      div.innerHTML += altHtml;
+    }
+
   });
 }
 

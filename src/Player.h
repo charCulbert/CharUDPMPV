@@ -21,6 +21,8 @@ public:
     std::string attract_video;
     std::string player_name;
     bool use_attract;
+    bool altEOF_mode; // true if current video was launched with ALTPLAY
+
     int udp_listen_port;  // UDP receiving port.
     int udp_send_port;    // UDP sending port.
     std::string controller_ip;
@@ -42,6 +44,7 @@ public:
 
 private:
     mpv_handle *ctx;  // MPV context.
+
 };
 
 #endif // PLAYER_H
