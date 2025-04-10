@@ -132,7 +132,7 @@ void Player::processCommand(const std::string &cmd, UdpComm &udp, const sockaddr
         mpv_command(ctx, play_cmd);
     }
     // ALTPLAY {FILENAME} command: Load file in alternate mode.
-    else if (cmd.substr(0, 8) == "ALTEOFPLAY ") {
+    else if (cmd.substr(0, 8) == "ALTPLAY ") {
         std::string filename = cmd.substr(8);
         udp.sendLog("ALTPLAY command. Filename: " + filename);
         altEOF_mode = true;  // Mark that we're in ALT mode.
