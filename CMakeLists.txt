@@ -12,6 +12,8 @@ add_executable(CharUDPMPV
         src/Player.h
         src/Controller.cpp
         src/Controller.h
+        src/RandomizedSender.cpp
+        src/RandomizedSender.h
 )
 
 if (WIN32)

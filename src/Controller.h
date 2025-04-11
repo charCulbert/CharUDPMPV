@@ -4,8 +4,14 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <mutex>
+#include <iostream>
+#include <thread>
+#include <chrono>
+#include <cstring>
 #include "json.hpp"
 #include "UdpComm.h"
+
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -36,9 +42,14 @@ public:
 
     // cues fired count
     std::unordered_map<std::string, int> cueFiredCount;
+    std::mutex dotsMutex;
+    bool dots_on = false;  // Shared flag to control command sending.
 
     // Cue definitions (each cue is a JSON object).
     std::vector<json> cues;
+
+
+
 
     // Start the controller (spawns a UDP listener in its own thread).
     void start();

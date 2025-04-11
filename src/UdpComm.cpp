@@ -39,6 +39,10 @@ UdpComm::~UdpComm() {
 #endif
 }
 
+int UdpComm::getSendPort() {
+    return m_sendPort;
+}
+
 void UdpComm::sendLog(const std::string &msg) {
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {

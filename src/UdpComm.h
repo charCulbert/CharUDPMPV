@@ -30,6 +30,8 @@ public:
     // The callback receives the received message, the source sockaddr_in and its length.
     void runListener(const std::function<void(const std::string&, const struct sockaddr_in&, socklen_t)>& handler);
 
+    int getSendPort();
+
 private:
     int m_listenPort;
     int m_sendPort;
