@@ -11,6 +11,8 @@
 #include <cstring>
 #include "json.hpp"
 #include "UdpComm.h"
+#include "RandomizedSender.h"
+
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -44,6 +46,8 @@ public:
     std::unordered_map<std::string, int> cueFiredCount;
     std::mutex dotsMutex;
     bool dots_on = false;  // Shared flag to control command sending.
+    RandomizedSender* dotsBS1 = nullptr;
+    RandomizedSender* dotsBS2 = nullptr;
 
     // Cue definitions (each cue is a JSON object).
     std::vector<json> cues;

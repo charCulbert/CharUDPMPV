@@ -34,6 +34,12 @@ Controller::~Controller() {
     if (udp) {
         delete udp;
     }
+    if (dotsBS1) {
+        delete dotsBS1;
+    }
+    if (dotsBS2) {
+        delete dotsBS2;
+    }
 }
 void Controller::processStartupComplete() {
     for (auto &cue : cues) {
@@ -63,7 +69,24 @@ void Controller::processStartupComplete() {
             }
         }
     }
+    // Now load the RandomizedSender instances for dotsBS1 and dotsBS2.
+    auto it1 = devices.find("BS1");
+    if (it1 != devices.end()) {
+        dotsBS1 = new RandomizedSender("dotsBS1", it1->second, udp);
+        std::cout << "Initialized RandomizedSender dotsBS1" << std::endl;
+    } else {
+        std::cout << "Device dotsBS1 not found in devices list." << std::endl;
+    }
+
+    auto it2 = devices.find("BS2");
+    if (it2 != devices.end()) {
+        dotsBS2 = new RandomizedSender("dotsBS2", it2->second, udp);
+        std::cout << "Initialized RandomizedSender dotsBS2" << std::endl;
+    } else {
+        std::cout << "Device dotsBS2 not found in devices list." << std::endl;
+    }
 }
+
 
 void Controller::start() {
     // Create the UdpComm instance using the controller’s configuration.
@@ -76,10 +99,15 @@ void Controller::start() {
             processIncomingMessage(msg, src, srcLen);
         });
     });
-    std::cout << "waiting 3s for intialization before running startup commands" << std::endl;
+    std::cout << "waiting 3s for initialisation before running startup commands" << std::endl;
     std::this_thread::sleep_for(std::chrono::milliseconds(3000));
 
     processStartupComplete(); // or whatever your device name is
+
+    dotsBS1->setOnOff(true);
+    dotsBS2->setOnOff(true);
+    dotsBS1->scheduleNext();
+    dotsBS2->scheduleNext();
 
     listenerThread.join();
 }
@@ -139,13 +167,16 @@ void Controller::processIncomingMessage(const std::string &msg, const sockaddr_i
                     int firedSoFar   = cueFiredCount.at(cueName);
                     bool useAlternate = false;
 
-                    // For example, we do "alternate" if firedSoFar is divisible by countRequirement.
-                    if (firedSoFar == countRequirement) {
+
+                    if (cue.contains("alternate_actions") && cue["alternate_actions"].is_array()) {
                         std::cout << "firedsofar is: " << firedSoFar << std::endl;
-                        useAlternate = true;
-                        cueFiredCount[cueName] = 0;
+                        if (firedSoFar == countRequirement) {
+                      useAlternate = true;
+                      cueFiredCount[cueName] = 0;
+                  }
+                        std::cout << "using alternate? " << useAlternate << std::endl;
+
                     }
-                    std::cout << "using alternate? " << useAlternate << std::endl;
 
                     // If "alternate_actions" array is present and it's time to use it
                     if (useAlternate && cue.contains("alternate_actions") && cue["alternate_actions"].is_array()) {
@@ -194,6 +225,32 @@ void Controller::processIncomingMessage(const std::string &msg, const sockaddr_i
 
                 }).detach();
             }
+        }
+    }
+    // NEW: Check if the message is "ENDP" and call scheduleNext on the corresponding RandomizedSender
+    if (msg == "ENDP") {
+        if (senderName == "BS1") {
+            if (dotsBS1)
+                dotsBS1->scheduleNext();
+        } else if (senderName == "BS2") {
+            if (dotsBS2)
+                dotsBS2->scheduleNext();
+        }
+    }
+    if (msg == "EOF") {
+        if (senderName == "AnaPC") {
+            if (dotsBS1)
+                dotsBS1->setOnOff(false);
+            if (dotsBS2)
+                dotsBS2->setOnOff(false);
+        }
+    }
+    if (msg == "EOF") {
+        if (senderName == "VIDEOPC2") {
+            if (dotsBS1)
+                dotsBS1->setOnOff(true);
+            if (dotsBS2)
+                dotsBS2->setOnOff(true);
         }
     }
 }
