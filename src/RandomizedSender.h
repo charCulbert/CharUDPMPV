@@ -13,6 +13,7 @@ public:
     void setOnOff(bool state);
     void scheduleNext();
     std::string generateRandomCommand();
+    int currentSequenceClipsRemaining;
     void sendUdpMessage(const std::string &command);
 
 private:

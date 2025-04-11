@@ -106,8 +106,8 @@ void Controller::start() {
 
     dotsBS1->setOnOff(true);
     dotsBS2->setOnOff(true);
-    dotsBS1->scheduleNext();
-    dotsBS2->scheduleNext();
+    std::thread([this]() { dotsBS1->scheduleNext(); }).detach();
+    std::thread([this]() { dotsBS2->scheduleNext(); }).detach();
 
     listenerThread.join();
 }
@@ -230,29 +230,35 @@ void Controller::processIncomingMessage(const std::string &msg, const sockaddr_i
     // NEW: Check if the message is "ENDP" and call scheduleNext on the corresponding RandomizedSender
     if (msg == "ENDP") {
         if (senderName == "BS1") {
-            if (dotsBS1)
+            if (dotsBS1) {
                 dotsBS1->sendUdpMessage("STOPCL");
-                dotsBS1->scheduleNext();
-        } else if (senderName == "BS2") {
-            if (dotsBS2)
+                std::thread([this]() { dotsBS1->scheduleNext(); }).detach();
+            }
+        }
+        else if (senderName == "BS2") {
+            if (dotsBS2) {
                 dotsBS2->sendUdpMessage("STOPCL");
-                dotsBS2->scheduleNext();
+                std::thread([this]() { dotsBS2->scheduleNext(); }).detach();
+            }
         }
     }
-    if (msg == "EOF") {
-        if (senderName == "AnaPC") {
-            if (dotsBS1)
-                dotsBS1->setOnOff(false);
-            if (dotsBS2)
-                dotsBS2->setOnOff(false);
+        if (msg == "EOF") {
+            if (senderName == "AnaPC") {
+                if (dotsBS1)
+                    dotsBS1->setOnOff(false);
+                if (dotsBS2)
+                    dotsBS2->setOnOff(false);
+            }
+        }
+        if (msg == "EOF") {
+            if (senderName == "VIDEOPC2") {
+                if (dotsBS1)
+                    dotsBS1->setOnOff(true);
+                std::thread([this]() { dotsBS1->scheduleNext(); }).detach();
+                if (dotsBS2)
+                    dotsBS2->setOnOff(true);
+                std::thread([this]() { dotsBS2->scheduleNext(); }).detach();
+            }
         }
     }
-    if (msg == "EOF") {
-        if (senderName == "VIDEOPC2") {
-            if (dotsBS1)
-                dotsBS1->setOnOff(true);
-            if (dotsBS2)
-                dotsBS2->setOnOff(true);
-        }
-    }
-}
+
