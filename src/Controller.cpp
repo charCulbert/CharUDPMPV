@@ -231,9 +231,11 @@ void Controller::processIncomingMessage(const std::string &msg, const sockaddr_i
     if (msg == "ENDP") {
         if (senderName == "BS1") {
             if (dotsBS1)
+                dotsBS1->sendUdpMessage("STOPCL");
                 dotsBS1->scheduleNext();
         } else if (senderName == "BS2") {
             if (dotsBS2)
+                dotsBS2->sendUdpMessage("STOPCL");
                 dotsBS2->scheduleNext();
         }
     }
