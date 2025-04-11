@@ -43,6 +43,7 @@ void RandomizedSender::scheduleNext() {
         // Generate a new sequence length (1 to 10 clips).
         currentSequenceClipsRemaining = 1 + rand() % 10;
 
+
         // Play the first clip of the new sequence.
         std::string command = generateRandomCommand();
         sendUdpMessage(command);
