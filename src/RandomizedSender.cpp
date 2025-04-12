@@ -3,10 +3,12 @@
 #include <cstdlib>
 #include <chrono>
 #include <thread>
+#include <random>
 
 RandomizedSender::RandomizedSender(const std::string &deviceName, const std::string &deviceIp, UdpComm *udp)
-    : deviceName(deviceName), deviceIp(deviceIp), udp(udp), dots_on(false)
+    : deviceName(deviceName), deviceIp(deviceIp), udp(udp), dots_on(false), gen(std::random_device{}())
 {
+    currentSequenceClipsRemaining = 0;
 }
 
 void RandomizedSender::setOnOff(bool state) {
@@ -15,8 +17,6 @@ void RandomizedSender::setOnOff(bool state) {
     if (dots_on == false) {
         sendUdpMessage("STOPCL");
     }
-    int currentSequenceClipsRemaining;
-
 }
 
 void RandomizedSender::scheduleNext() {
@@ -35,15 +35,28 @@ void RandomizedSender::scheduleNext() {
         sendUdpMessage(command);
         currentSequenceClipsRemaining--;
     } else {
-        // No more clips in the current sequence.
-        // Wait a random period between 10 and 100 seconds before starting a new sequence.
-        int waitMillis = 10000 + rand() % 90000; // 10,000 to 100,000 ms
+        int waitMillis;
+        {
+            // Guard random engine access with genMutex.
+            std::lock_guard<std::mutex> lock(genMutex);
+            std::uniform_int_distribution<int> waitDist(30000, 170001);
+            waitMillis = waitDist(gen);
+        }
+
         std::this_thread::sleep_for(std::chrono::milliseconds(waitMillis));
 
-        // Generate a new sequence length (1 to 10 clips).
-        currentSequenceClipsRemaining = 1 + rand() % 10;
-
-
+        // Generate a new sequence length between 1 and 10.
+        {
+            std::lock_guard<std::mutex> lock(genMutex);
+            std::uniform_int_distribution<int> seqDist(1, 10);
+            currentSequenceClipsRemaining = seqDist(gen);
+        }
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            if (!dots_on) {
+                return; // Don't proceed if disabled.
+            }
+        }
         // Play the first clip of the new sequence.
         std::string command = generateRandomCommand();
         sendUdpMessage(command);
@@ -53,9 +66,16 @@ void RandomizedSender::scheduleNext() {
 
 
 std::string RandomizedSender::generateRandomCommand() {
-    char randomChar = 'a' + rand() % 23;  // Random letter between 'a' and 'w'
+    char randomChar;
+    {
+        // Guard generator when picking a random command.
+        std::lock_guard<std::mutex> lock(genMutex);
+        std::uniform_int_distribution<int> dis(0, 22);
+        randomChar = 'a' + dis(gen);
+    }
     return "PLAY DOTS-" + std::string(1, randomChar) + ".mp4";
 }
+
 
 void RandomizedSender::sendUdpMessage(const std::string &command) {
     std::cout << "Sending to " << deviceName << " (" << deviceIp << "): " << command << std::endl;

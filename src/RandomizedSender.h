@@ -4,6 +4,7 @@
 #include <string>
 #include <mutex>
 #include "UdpComm.h"  // Added to bring in the full definition of UdpComm
+#include <random>
 
 class RandomizedSender {
 public:
@@ -22,6 +23,11 @@ private:
     UdpComm* udp;
     bool dots_on;
     std::mutex mutex;
+    std::mutex genMutex;   // For protecting random engine usage.
+
+    // Each instance has its own random engine.
+    std::mt19937 gen;
+
 };
 
 #endif // RANDOMIZEDSENDER_H
